@@ -11,16 +11,13 @@ ENV LANG C.UTF-8
 RUN set -x \
         && apk update \
 	&& apk add --no-cache \
-        musl \
-        java-cacerts \
-        openjdk8 \
-        python \
-        python-dev \
-        py-pip \
-        build-base 
+	&& openjdk8 \
+        && python \
+        && python-dev \
+        && py-pip \
+        && build-base 
 
-RUN  apk update \
-     && apk add --no-cache --virtual .build-deps  \
+RUN apk add --no-cache --virtual .build-deps  \
                 bzip2-dev \
                 coreutils \
                 dpkg-dev dpkg \
@@ -43,9 +40,9 @@ RUN  apk update \
                 tk \
                 tk-dev \
                 xz-dev \
-                zlib-dev 
+                zlib-dev \
 
-RUN python
+run python
 
 #================
 #Molecule
@@ -63,12 +60,20 @@ ENV PACKAGES="\
     "
 RUN apk add --update --no-cache ${PACKAGES}
 
+ENV MOLECULE_EXTRAS="azure,docker,docs,ec2,gce,hetznercloud,linode,lxc,openstack,vagrant,windows"
+
+ADD . .
+RUN \
+    pip wheel \
+    -w dist \
+    ".[${MOLECULE_EXTRAS}]"
 
 # ✄---------------------------------------------------------------------
 # This is an actual target container:
 
 
 ENV PACKAGES="\
+    docker \
     git \
     openssh-client \
     ruby \
@@ -82,6 +87,11 @@ ENV BUILD_DEPS="\
     ruby-rdoc \
     "
 
+ENV PIP_INSTALL_ARGS="\
+    --only-binary :all: \
+    --no-index \
+    -f /usr/src/molecule/dist \
+    "
 
 ENV GEM_PACKAGES="\
     rubocop \
@@ -89,13 +99,16 @@ ENV GEM_PACKAGES="\
     etc \
     "
 
+ENV MOLECULE_EXTRAS="azure,docker,docs,ec2,gce,hetznercloud,linode,lxc,openstack,vagrant,windows"
+
 
 RUN \
     apk add --update --no-cache ${BUILD_DEPS} ${PACKAGES} && \
+    pip install ${PIP_INSTALL_ARGS} "molecule[${MOLECULE_EXTRAS}]" && \
     gem install ${GEM_PACKAGES} && \
+    apk del --no-cache ${BUILD_DEPS} && \
     rm -rf /root/.cache
 
-RUN pip install --user molecule
 
 #================
 # Jenkins
@@ -111,10 +124,9 @@ RUN echo "jenkins:jenkins" | chpasswd \
     && echo "alias docker='sudo docker '" >> /home/jenkins/.bashrc \
     && mkdir -p /var/run/sshd \
     && ssh-keygen -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa \
-    && ssh-keygen -f /etc/ssh/ssh_host_dsa_key -N '' -t dsa 
-
-RUN addgroup jenkins dockremap
+    && ssh-keygen -f /etc/ssh/ssh_host_dsa_key -N '' -t dsa \
+    && usermod -aG docker jenkins
 
 EXPOSE 22
-CMD []
+
 
